@@ -7,14 +7,22 @@ import re
 
 def load_existing_data():
     try:
-        with open('data.json', 'r') as f:
-            return json.load(f)
-    except FileNotFoundError:
+        # Check if file exists and has content
+        if os.path.exists('data.json') and os.path.getsize('data.json') > 0:
+            with open('data.json', 'r') as f:
+                return json.load(f)
+        else:
+            # Return default structure if file is empty or doesn't exist
+            return {"entries": []}
+    except json.JSONDecodeError:
+        # Return default structure if JSON is invalid
+        return {"entries": []}
+    except Exception as e:
+        print(f"Error loading data: {e}")
         return {"entries": []}
 
 def clean_jsonp(jsonp_string):
     # Remove the JSONP callback wrapper and get pure JSON
-    # Typical JSONP format: callback({...})
     try:
         # Extract the JSON part from JSONP
         json_str = re.search(r'\{.*\}', jsonp_string).group()
@@ -40,7 +48,16 @@ def fetch_new_data():
         print(f"Error fetching data: {e}")
         sys.exit(1)
 
+def ensure_data_file_exists():
+    """Ensure data.json exists with valid JSON structure"""
+    if not os.path.exists('data.json'):
+        with open('data.json', 'w') as f:
+            json.dump({"entries": []}, f, indent=2)
+
 def main():
+    # Ensure data.json exists with valid structure
+    ensure_data_file_exists()
+    
     # Load existing data
     data = load_existing_data()
     
