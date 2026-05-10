@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import requests
@@ -54,28 +55,31 @@ def ensure_data_file_exists():
         with open('data.json', 'w') as f:
             json.dump({"entries": []}, f, indent=2)
 
+def payload_hash(payload):
+    canonical = json.dumps(payload, sort_keys=True, separators=(',', ':'))
+    return hashlib.sha256(canonical.encode('utf-8')).hexdigest()
+
 def main():
-    # Ensure data.json exists with valid structure
     ensure_data_file_exists()
-    
-    # Load existing data
     data = load_existing_data()
-    
-    # Fetch new data
     new_data = fetch_new_data()
-    
-    # Add timestamp to new data
-    entry = {
+
+    entries = data.get("entries", [])
+    if entries and payload_hash(entries[-1].get("data")) == payload_hash(new_data):
+        print("No change since last entry; skipping append.")
+        return
+
+    entries.append({
         "timestamp": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
         "data": new_data
-    }
-    
-    # Append new data
-    data["entries"].append(entry)
-    
-    # Save updated data
+    })
+    data["entries"] = entries
+
     with open('data.json', 'w') as f:
         json.dump(data, f, indent=2)
+
+    with open('latest.json', 'w') as f:
+        json.dump(new_data, f)
 
 if __name__ == "__main__":
     main()
