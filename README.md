@@ -13,7 +13,7 @@ This repository automatically collects Giphy Reddit GIF JSON data on a daily bas
 
 - `data.json`: Contains the accumulated JSON data
 - `fetch_data.py`: Python script for fetching and processing the data
-- `.github/workflows/fetch-data.yml`: GitHub Actions workflow configuration
+- `.github/workflows/main.yml`: GitHub Actions workflow configuration
 
 ## Data Format
 
