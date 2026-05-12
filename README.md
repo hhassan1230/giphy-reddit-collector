@@ -1,47 +1,66 @@
 # Giphy Reddit GIF Data Collector
 
-This repository automatically collects Giphy Reddit GIF JSON data on a daily basis and maintains a historical record of the data.
+Builds and serves a growing catalog of unique GIF posts from
+[r/gifs](https://www.reddit.com/r/gifs). Sourced directly from Reddit's
+public JSON endpoint and updated daily via GitHub Actions.
 
 ## Overview
 
-- Data is collected daily at 04:00 UTC
-- Historical data is maintained in `data.json`
-- Each entry includes a timestamp and the collected data
-- Uses GitHub Actions for automated collection
+- Daily run at 04:00 UTC fetches the current top of `r/gifs` from
+  `https://www.reddit.com/r/gifs.json?limit=75`.
+- Posts whose `data.id` is already in the catalog are skipped; only
+  new posts are appended.
+- If the Reddit fetch fails (network error, rate limit, malformed
+  response), the run exits cleanly without modifying any files.
+- The catalog grows forever (no cap).
 
-## Structure
+## Files
 
-- `data.json`: Contains the accumulated JSON data
-- `fetch_data.py`: Python script for fetching and processing the data
-- `.github/workflows/fetch-data.yml`: GitHub Actions workflow configuration
+- `data.json`: the full catalog, formatted with indentation (human-readable).
+- `latest.json`: byte-equivalent payload, unindented — this is the file
+  consumers should fetch from raw.githubusercontent.com.
+- `fetch_data.py`: daily collection script.
+- `compact_data.py`: legacy one-shot from the old archive-format era;
+  kept for reference but no longer applicable to the current schema.
+- `.github/workflows/main.yml`: GitHub Actions schedule and commit step.
 
-## Data Format
+## Schema
 
-The data is stored in the following structure:
+Both `data.json` and `latest.json` mirror Reddit's standard listing
+envelope so that consumers handle the same shape they'd get from the
+upstream endpoint:
 
 ```json
 {
-  "entries": [
-    {
-      "timestamp": "2025-03-20 04:21:08",
-      "data": {
-        // Giphy Reddit GIF data
-      }
-    }
-  ]
+  "kind": "Listing",
+  "data": {
+    "modhash": "",
+    "geo_filter": "",
+    "after": null,
+    "before": null,
+    "dist": 176,
+    "children": [
+      { "kind": "t3", "data": { "id": "abc123", "title": "...", "url": "...", "...": "..." } }
+    ]
+  }
 }
 ```
 
+`dist` is kept in sync with `len(children)` on every write.
+
+## Consumer URL
+
+```
+https://raw.githubusercontent.com/hhassan1230/giphy-reddit-collector/main/latest.json
+```
+
+CORS-open. Cache-Control: 5 minutes.
+
 ## Setup
 
-1. Repository is automatically configured to fetch data
-2. No additional configuration required
-3. Manual runs can be triggered from the Actions tab
+No configuration needed — the workflow runs on schedule. Manual runs
+can be triggered from the Actions tab via `workflow_dispatch`.
 
 ## Author
 
 Created by @hhassan1230
-
-```
-
-```

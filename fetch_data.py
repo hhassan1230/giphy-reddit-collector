@@ -1,85 +1,102 @@
-import hashlib
 import json
 import os
+
 import requests
-from datetime import datetime
-import sys
-import re
 
-def load_existing_data():
-    try:
-        # Check if file exists and has content
-        if os.path.exists('data.json') and os.path.getsize('data.json') > 0:
-            with open('data.json', 'r') as f:
-                return json.load(f)
-        else:
-            # Return default structure if file is empty or doesn't exist
-            return {"entries": []}
-    except json.JSONDecodeError:
-        # Return default structure if JSON is invalid
-        return {"entries": []}
-    except Exception as e:
-        print(f"Error loading data: {e}")
-        return {"entries": []}
+REDDIT_URL = "https://www.reddit.com/r/gifs.json?limit=75"
+USER_AGENT = "giphy-reddit-collector/1.0 (+https://github.com/hhassan1230/giphy-reddit-collector)"
+DATA_FILE = "data.json"
+LATEST_FILE = "latest.json"
 
-def clean_jsonp(jsonp_string):
-    # Remove the JSONP callback wrapper and get pure JSON
+
+def new_catalog():
+    return {
+        "kind": "Listing",
+        "data": {
+            "modhash": "",
+            "geo_filter": "",
+            "after": None,
+            "before": None,
+            "dist": 0,
+            "children": [],
+        },
+    }
+
+
+def load_catalog():
+    if not os.path.exists(DATA_FILE) or os.path.getsize(DATA_FILE) == 0:
+        return new_catalog()
     try:
-        # Extract the JSON part from JSONP
-        json_str = re.search(r'\{.*\}', jsonp_string).group()
-        return json.loads(json_str)
-    except (AttributeError, json.JSONDecodeError) as e:
-        print(f"Error parsing JSONP: {e}")
-        sys.exit(1)
+        with open(DATA_FILE, "r") as f:
+            return json.load(f)
+    except (json.JSONDecodeError, OSError) as e:
+        print(f"Could not load existing catalog ({e}); starting fresh.")
+        return new_catalog()
+
 
 def fetch_new_data():
-    base_url = "http://akz.imgfarm.com/pub/feeds/giphy/redditgif.jsonp"
-    # Add timestamp to prevent caching
-    url = f"{base_url}?v={int(datetime.utcnow().timestamp() * 1000)}"
-    
     try:
-        response = requests.get(url)
+        response = requests.get(
+            REDDIT_URL,
+            headers={"User-Agent": USER_AGENT},
+            timeout=30,
+        )
         response.raise_for_status()
-        
-        # Clean JSONP response to get pure JSON
-        json_data = clean_jsonp(response.text)
-        return json_data
-        
-    except requests.RequestException as e:
+        return response.json()
+    except (requests.RequestException, json.JSONDecodeError) as e:
         print(f"Error fetching data: {e}")
-        sys.exit(1)
+        return None
 
-def ensure_data_file_exists():
-    """Ensure data.json exists with valid JSON structure"""
-    if not os.path.exists('data.json'):
-        with open('data.json', 'w') as f:
-            json.dump({"entries": []}, f, indent=2)
 
-def payload_hash(payload):
-    canonical = json.dumps(payload, sort_keys=True, separators=(',', ':'))
-    return hashlib.sha256(canonical.encode('utf-8')).hexdigest()
+def is_valid_payload(payload):
+    if not isinstance(payload, dict):
+        return False
+    inner = payload.get("data")
+    if not isinstance(inner, dict):
+        return False
+    children = inner.get("children")
+    return isinstance(children, list) and len(children) > 0
+
+
+def child_id(child):
+    if not isinstance(child, dict):
+        return None
+    inner = child.get("data")
+    if not isinstance(inner, dict):
+        return None
+    return inner.get("id")
+
 
 def main():
-    ensure_data_file_exists()
-    data = load_existing_data()
     new_data = fetch_new_data()
-
-    entries = data.get("entries", [])
-    if entries and payload_hash(entries[-1].get("data")) == payload_hash(new_data):
-        print("No change since last entry; skipping append.")
+    if not is_valid_payload(new_data):
+        print("Upstream returned no data or unrecognized shape; "
+              "leaving existing files untouched.")
         return
 
-    entries.append({
-        "timestamp": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
-        "data": new_data
-    })
-    data["entries"] = entries
+    catalog = load_catalog()
+    existing_ids = {child_id(c) for c in catalog["data"]["children"]}
 
-    with open('data.json', 'w') as f:
-        json.dump(data, f, indent=2)
+    new_children = [
+        child for child in new_data["data"]["children"]
+        if (cid := child_id(child)) is not None and cid not in existing_ids
+    ]
 
-    with open('latest.json', 'w') as f:
-        json.dump(new_data, f)
+    if not new_children:
+        print("No new gifs since last run; skipping write.")
+        return
+
+    catalog["data"]["children"].extend(new_children)
+    catalog["data"]["dist"] = len(catalog["data"]["children"])
+
+    with open(DATA_FILE, "w") as f:
+        json.dump(catalog, f, indent=2)
+    with open(LATEST_FILE, "w") as f:
+        json.dump(catalog, f)
+
+    print(f"Added {len(new_children)} new gifs "
+          f"(catalog now {catalog['data']['dist']}).")
+
 
 if __name__ == "__main__":
     main()
