@@ -3,7 +3,7 @@ import os
 
 import requests
 
-REDDIT_URL = "https://www.reddit.com/r/gifs.json?limit=75"
+REDDIT_URL = "https://old.reddit.com/r/gifs.json?limit=75"
 USER_AGENT = "giphy-reddit-collector/1.0 (+https://github.com/hhassan1230/giphy-reddit-collector)"
 DATA_FILE = "data.json"
 LATEST_FILE = "latest.json"
